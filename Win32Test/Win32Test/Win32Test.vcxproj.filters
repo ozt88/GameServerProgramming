@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="소스 파일\Json">
+      <UniqueIdentifier>{ff05d356-8ff4-455e-8811-3b1f28b5ed28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Features">
+      <UniqueIdentifier>{aadbcb89-8d15-4eda-b518-7822355f0e1c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\D3D">
+      <UniqueIdentifier>{d469cd5b-434c-4c1c-aa6f-89da8dbb4110}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shader">
+      <UniqueIdentifier>{e38e3534-c59b-4e3b-9416-a09c446c0ab0}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="json\jsoncpp.cpp">
+      <Filter>소스 파일\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="GameManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="MyRect.cpp">
+      <Filter>소스 파일\Features</Filter>
+    </ClCompile>
+    <ClCompile Include="BasicFeatures.cpp">
+      <Filter>소스 파일\Features</Filter>
+    </ClCompile>
+    <ClCompile Include="MyPolygon.cpp">
+      <Filter>소스 파일\Features</Filter>
+    </ClCompile>
+    <ClCompile Include="AbstractFeature.cpp">
+      <Filter>소스 파일\Features</Filter>
+    </ClCompile>
+    <ClCompile Include="DemoApp.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="D3DApp.cpp">
+      <Filter>소스 파일\D3D</Filter>
+    </ClCompile>
+    <ClCompile Include="D3DUtil.cpp">
+      <Filter>소스 파일\D3D</Filter>
+    </ClCompile>
+    <ClCompile Include="GameTimer.cpp">
+      <Filter>소스 파일\D3D</Filter>
+    </ClCompile>
+    <ClCompile Include="MyUtils.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="json\json.h">
+      <Filter>소스 파일\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="json\json-forwards.h">
+      <Filter>소스 파일\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="GameManager.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="MyRect.h">
+      <Filter>소스 파일\Features</Filter>
+    </ClInclude>
+    <ClInclude Include="BasicFeatures.h">
+      <Filter>소스 파일\Features</Filter>
+    </ClInclude>
+    <ClInclude Include="MyPolygon.h">
+      <Filter>소스 파일\Features</Filter>
+    </ClInclude>
+    <ClInclude Include="AbstractFeature.h">
+      <Filter>소스 파일\Features</Filter>
+    </ClInclude>
+    <ClInclude Include="DemoApp.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="D3DApp.h">
+      <Filter>소스 파일\D3D</Filter>
+    </ClInclude>
+    <ClInclude Include="D3DUtil.h">
+      <Filter>소스 파일\D3D</Filter>
+    </ClInclude>
+    <ClInclude Include="GameTimer.h">
+      <Filter>소스 파일\D3D</Filter>
+    </ClInclude>
+    <ClInclude Include="MyUtils.h">
+      <Filter>소스 파일</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Win32Test.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\ICON&amp;amp%3bCURSOR\gam1088.cur">
+      <Filter>리소스 파일</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="..\ICON&amp;amp%3bCURSOR\Fasticon-Angry-Birds-Black-bird.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="..\ICON&amp;amp%3bCURSOR\gameOfThrone.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="MyShader.fx">
+      <Filter>shader</Filter>
+    </FxCompile>
+  </ItemGroup>
+</Project>

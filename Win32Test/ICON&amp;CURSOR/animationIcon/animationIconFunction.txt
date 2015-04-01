@@ -1,0 +1,26 @@
+HCURSOR LoadAnimatedCursor(HINSTANCE hInstance , UINT nID, LPCTSTR pszResouceType)
+{
+	HCURSOR hCursor = NULL;	 
+	if (hInstance)
+	{
+		HRSRC hResource = FindResource(hInstance, MAKEINTRESOURCE(nID), pszResouceType);
+		DWORD dwResourceSize = SizeofResource(hInstance, hResource);
+		if (dwResourceSize>0)
+		{
+			HGLOBAL hRsrcGlobal = LoadResource(hInstance, hResource);
+			if (hRsrcGlobal)
+			{
+				LPBYTE pResource = (LPBYTE)LockResource(hRsrcGlobal);
+				if (pResource)
+				{
+					hCursor = (HCURSOR)CreateIconFromResource(pResource, dwResourceSize, FALSE, 0x00030000);
+					UnlockResource(pResource);
+				}
+				FreeResource(hRsrcGlobal);
+			}
+		}
+	}
+	return hCursor;
+}
+
+wcex.hCursor = LoadAnimatedCursor(hInstance, IDR_MYTYPE1, L"MyType");
