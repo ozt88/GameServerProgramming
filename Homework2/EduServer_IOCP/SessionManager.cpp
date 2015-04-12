@@ -49,15 +49,21 @@ bool SessionManager::AcceptSessions()
 {
 	FastSpinlockGuard guard(mLock);
 
+	//MAX_CONNECTION 개수만큼 Session을 유지하도록 socket만들어서 AcceptEx걸어놈
 	while (mCurrentIssueCount - mCurrentReturnCount < MAX_CONNECTION)
 	{
 		//TODO mFreeSessionList에서 ClientSession* 꺼내서 PostAccept() 해주기.. (위의 ReturnClientSession와 뭔가 반대로 하면 될 듯?)
-		
+		ClientSession* newClient = mFreeSessionList.back();
+		mFreeSessionList.pop_back();
+
+		++mCurrentIssueCount;
+
 		// AddRef()도 당연히 해줘야 하고...
+		newClient->AddRef();
 
 		// 실패시 false
-		//if (false == newClient->PostAccept())
-		//	return false;
+		if (false == newClient->PostAccept())
+			return false;
 	}
 
 

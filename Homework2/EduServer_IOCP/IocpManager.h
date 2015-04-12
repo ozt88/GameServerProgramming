@@ -8,6 +8,10 @@ struct OverlappedRecvContext;
 struct OverlappedDisconnectContext;
 struct OverlappedAcceptContext;
 
+BOOL DisconnectEx(SOCKET hSocket, LPOVERLAPPED lpOverlapped, DWORD dwFlags, DWORD reserved);
+BOOL _AcceptEx(SOCKET sListenSocket, SOCKET sAcceptSocket, PVOID lpOutputBuffer, DWORD dwReceiveDataLength,
+			   DWORD dwLocalAddressLength, DWORD dwRemoteAddressLength, LPDWORD lpdwBytesReceived, LPOVERLAPPED lpOverlapped);
+
 class IocpManager
 {
 public:
@@ -26,6 +30,8 @@ public:
 
 	SOCKET* GetListenSocket()  { return &mListenSocket;  }
 
+
+
 private:
 
 	static unsigned int WINAPI IoWorkerThread(LPVOID lpParam);
@@ -40,6 +46,8 @@ private:
 	int		mIoThreadCount;
 
 	SOCKET	mListenSocket;
+
+
 };
 
 extern __declspec(thread) int LIoThreadId;

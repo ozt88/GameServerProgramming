@@ -1,6 +1,7 @@
 #pragma once
 
-#define LISTEN_PORT		9990
+//에러는 아니지만 포트번호 수정
+#define LISTEN_PORT		9001
 #define MAX_CONNECTION	10000
 
 enum THREAD_TYPE

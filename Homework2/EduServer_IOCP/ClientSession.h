@@ -89,7 +89,7 @@ public:
 	bool	IsConnected() const { return !!mConnected; }
 
 	bool	PostAccept();
-	void	AcceptCompletion();
+	bool	AcceptCompletion(); //에러는 아니지만 disconnect 시점을 바깥으로 뺌 bool 반환
 
 	bool	PreRecv() ; ///< zero byte recv
 
