@@ -180,7 +180,7 @@ unsigned int WINAPI IocpManager::IoWorkerThread(LPVOID lpParam)
 			int gle = GetLastError();
 
 			//TODO: check time out first ... GQCS 타임 아웃의 경우는 어떻게?
-			//INFINITE으로 설정된 경우 TIMEOUT이 발생된 것은 에러
+			//INFINITE으로 설정된 경우 TIMEOUT이 발생된 것은 에러 ///# ㅇㅇ 다시 20으로 돌려놓고 한다면 그냥 continue만 하면 되겠지?
 			if(WAIT_TIMEOUT == gle)
 			{
 				CRASH_ASSERT(nullptr != theClient);
@@ -252,7 +252,8 @@ unsigned int WINAPI IocpManager::IoWorkerThread(LPVOID lpParam)
 bool IocpManager::PreReceiveCompletion(ClientSession* client, OverlappedPreRecvContext* context, DWORD dwTransferred)
 {
 	/// real receive...
-	// 에러발견
+	// 에러발견 ///# ㅋㅋ 
+
 	//return client->PreRecv();
 	return client->PostRecv();
 }
