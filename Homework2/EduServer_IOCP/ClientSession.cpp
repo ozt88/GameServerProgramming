@@ -54,11 +54,12 @@ bool ClientSession::PostAccept()
 	acceptContext->mWsaBuf.len = 0;
 
 	DWORD dwBytes = 0;
-	char buffer[128] = {0, }; ///# 이거 스택상에서 할당된 버퍼를 아중에  AcceptEx시에 다른 곳에서 여기에 접근해서 데이터를 쓰는 경우 우째될까?
+	//char buffer[128] = {0, }; ///# 이거 스택상에서 할당된 버퍼를 아중에  AcceptEx시에 다른 곳에서 여기에 접근해서 데이터를 쓰는 경우 우째될까? => 접근 오류발생할거같네요..
+	//기존에 있던 circularBuffer에 넣는 걸로 바꿨습니다.
 
 	if(FALSE == _AcceptEx(
 		*(GIocpManager->GetListenSocket()), mSocket, 
-		buffer, 0, 
+		mBuffer.GetBuffer(), 0, 
 		sizeof(sockaddr_in) + 16, sizeof(sockaddr_in) + 16, 
 		&dwBytes, (LPOVERLAPPED)acceptContext))
 	{
