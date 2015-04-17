@@ -38,7 +38,8 @@ struct OverlappedIOContext
 	
 } ;
 
-//TODO: 아래의 OverlappedXXXXContext는 ObjectPool<>을 사용하도록 수정
+//TODO: 아래의 OverlappedXXXXContext는 ObjectPool<>을 사용하도록 수정 ///# 사용 안하는데?? 빼먹은 듯?
+
 
 struct OverlappedSendContext : public OverlappedIOContext
 {

@@ -6,14 +6,18 @@
 
 
 template <class TOBJECT, int ALLOC_COUNT = 100>
-class ObjectPool
+class ObjectPool : public ClassTypeLock<TOBJECT>  ///# 이거 왜 빼먹음?
 {
 public:
 
 	static void* operator new(size_t objSize)
 	{
 		//TODO: TOBJECT 타입 단위로 lock 잠금
-		ClassTypeLock<TOBJECT>::LockGuard();
+		ClassTypeLock<TOBJECT>::LockGuard(); ///# 이렇게 하면 소멸자는 언제 콜되나? 이게 lock이 제대로 걸리는지?
+		
+		
+		/// 즉 아래 코드가 thread-safe한가?
+		
 		//freeList 체크
 		if (mFreeList == nullptr)
 		{
@@ -58,6 +62,8 @@ public:
 	{
 		//TODO: TOBJECT 타입 단위로 lock 잠금
 		ClassTypeLock<TOBJECT>::LockGuard();
+
+	
 		CRASH_ASSERT(mCurrentUseCount > 0);
 
 		//반환하기 전에 카운트 --
