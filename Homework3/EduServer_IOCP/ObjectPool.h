@@ -13,8 +13,8 @@ public:
 	static void* operator new(size_t objSize)
 	{
 		//TODO: TOBJECT 타입 단위로 lock 잠금
-		ClassTypeLock<TOBJECT>::LockGuard(); ///# 이렇게 하면 소멸자는 언제 콜되나? 이게 lock이 제대로 걸리는지?
-		
+		//ClassTypeLock<TOBJECT>::LockGuard(); ///# 이렇게 하면 소멸자는 언제 콜되나? 이게 lock이 제대로 걸리는지?
+		ClassTypeLock<TOBJECT>::LockGuard lock; //옥상에 가서 수정했습니다.
 		
 		/// 즉 아래 코드가 thread-safe한가?
 		
@@ -61,7 +61,7 @@ public:
 	static void	operator delete(void* obj)
 	{
 		//TODO: TOBJECT 타입 단위로 lock 잠금
-		ClassTypeLock<TOBJECT>::LockGuard();
+		ClassTypeLock<TOBJECT>::LockGuard lock; //옥상에 가서 수정했습니다.
 
 	
 		CRASH_ASSERT(mCurrentUseCount > 0);
