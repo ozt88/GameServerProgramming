@@ -7,8 +7,8 @@ IOCP Echo Server for educational purposes only.
 Timer, DoSync, LockOrder(TLS 사용), RWLock (FastSpinLock을 수정)
 Simple lock-free dispatcher (GCE)
 
-  - TODO 검색해서 구현
-  - 숨겨진(?) 버그 수정 -> 버그 수정 부분이 있다면 표시할 것
+  - TODO 검색해서 구현 ///# 잘했음.
+  - 숨겨진(?) 버그 수정 -> 버그 수정 부분이 있다면 표시할 것 ///# 버그는 못찾았나봄 ㅎㅎ 다음에 과제로 ㄱㄱ 예정
 
 
 *참고: 이 프로그램이 동작하는 시나리오
