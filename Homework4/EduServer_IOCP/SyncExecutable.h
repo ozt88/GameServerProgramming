@@ -35,7 +35,7 @@ public:
 		// DONE: this 포인터를 std::shared_ptr<T>형태로 반환.
 		//(HINT: 이 클래스는 std::enable_shared_from_this에서 상속받았다. 그리고 static_pointer_cast 사용)
 
-		return std::shared_ptr<T>(std::static_pointer_cast<T>( shared_from_this() ));
+		return std::static_pointer_cast<T>( shared_from_this() );
 	}
 private:
 

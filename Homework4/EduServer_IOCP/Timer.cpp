@@ -42,7 +42,5 @@ void Timer::DoTimerJob()
 
 		mTimerJobQueue.pop();
 	}
-
-
 }
 
