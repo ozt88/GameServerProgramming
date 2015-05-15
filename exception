@@ -1,0 +1,253 @@
+
+#Exception Filter
+
+Exception이란 내 생각엔 버그다. 프로세스가 정상적인 동작을 할 수 없을 때, 예외 이벤트가 발생하여 운영체제에서 프로세스를 강제 종료시켜버린다.  좀 규모가 있는 프로그램을 만들어서 돌리다보면 (거의 대부분의 나의 코드에서) 예상치못한  Exception이 발생한다. 디버그 모드에서 테스트할때는 괜찮았는데, 리얼로 배포해서 돌리다보면 생각지도 못한 곳에서 예외가 발생하기도 한다. 예외를 깔끔히 처리하는 것은 안전한 코드를 생산적으로 처리하는데 도움이 된다.
+
+### SEH
+
+Windows에서는 이 예외처리를 잘 할 수 있게 SEH라는 구조를 제공한다. 자세한 내용을 여기서 다루지는 않을 예정이다. 간단하게 설명하자면 정상적인 실행코드가 담기는 __try블록과, 종료처리 또는 예외 처리를 담당하는 __finally / __except 블록으로 나누어 예외를 처리한다. try에서 제대로 종료되면 __finally 영역이 수행되어 정상 종료시키고, 예외가 발생하면 __exception 블록에서 예외를 처리하는 것이다. 
+
+```c++
+__try{
+	//예외 체크하는 정상 수행코드 블럭
+}
+__finally{
+	//종료시 처리코드 블럭
+}
+__except(EXCEPTION_FILTER){
+	//예외발생시 처리 코드 블럭
+}
+```
+
+### Exception Filter
+
+위 코드를 보면 알겠지만 __except는 예외 필터를 인자로 받는다.  예외 필터란 예외 핸들링 이후에 어떻게 작업을 수행할 것인지를 결정하는 것이다.
+
+####예외필터에 따른 예외 처리 수행방식
+* **EXCEPTION_EXECUTE_HANDLER**
+> 이 필터는 예외가 발생하면 수행하던 작업을 종료하고 예외사항을 처리한다.  게임서버처럼 예외에 민감한 프로그램에 대해서는 이 방식으로 예외를 강력하게 제제하자.
+> 
+> **detail process** : 예외가 발생하면 __try 블록에서 바로 빠져나온다. 예외 발생한 이후의 라인은 모두 수행하지 않는다. 그리고 __try영역을 포함하는 콜스택의 최상위에서부터  존재하는 __finally 블록들을 스택순으로 수행한다.  즉 현 상태에 잡혀있는 모든 콜스택의 종료작업을 순차적으로 진행한다. 이를 Global Unwind라고 한다. 이 작업이 끝나면 __except 블록을 수행한다.
+> 
+> 
+> **주의사항** :  __finally 블록에 return문이 있다면, global unwind를 하는 도중에 중단될 수 있다.
+
+
+* **EXCEPTION_CONTINUE_EXECUTION** 
+> EXCEPTION_EXECUTE_HANDLER와는 반대의 개념으로, 필터함수에서 재보정 처리를 한다음 다시 그 라인으로 돌아가 재실행을 하는 것이다.  무한 반복하지 않기위해서 단순 필터만 넘기는것이 아니라 필터를 리턴하는 필터함수가 반드시 필요하다. 필터함수는 아래에서 좀더 자세히 이야기 하겠다. 
+
+
+* **EXCEPTION_CONTINUE_SEARCH** 
+> 현재 스택에 있는 예외 처리를 수행하지 않고, 더 하위 스택의 예외 처리를 찾아본다. 예외를 처리할 위치를 별도로 지정하기 위해서 사용하느 필터라고 생각하면 된다.
+> 
+> **detail process** : 
+> ```c++
+> void func(){
+>     __try{ ... }
+>     __except( EXCEPTION_CONTINUE_SEARCH ) { ... }
+> }
+> ```
+> 위 함수 func에서 예외가 발생하였고, 필터함수를 거쳐 예외필터가 EXCEPTION_CONTINUE_SEARCH로 판명나면 이 예외처리를 여기서 하지 않고 더 하위의 스택으로 내려가서 다른 예외 처리자를 찾는다. 
+
+* **EXCEPTION 반환 함수(필터 함수)**
+> 이 필터가 들어갈 공간에, 예외 필터를 반환하는 함수를 지정할 수도 있다.  별도의 처리자를 직접 함수로 만들어서 등록할 수 있다. 예외 정보를 받아 적절한 처리 과정을 거친뒤에 적합한 필터를 리턴하는 방식을 사용한다. 
+> 
+> 이 함수는  `EXCEPTION_FILTER (*func) (EXCEPTION_POINTERS)` 시그니처를 갖는다. 인자로 들어오는 EXCEPTION_POINTER는 예외정보를 담는 구조체로서 Exception이 발생한 영역 즉 except 블록 안에서만 유효하다.  따라서 이 함수를 Exception Filter영역에서 호출해주지 않으면, 제대로된 exception 정보를 받을 수 없다. 구조체의 형태는 다음과 같다.
+>```c++
+> struct EXCEPTION_POINTERS
+> {
+>       PEXCEPTION_RECORD ExceptionRecord;
+>       PCONTEXT ContextRecord;
+> };
+>```
+>CONTEXT구조체는 CPU에 대한 정보를 담고 있고, 다른 디버깅 정보는 모두 RECORD 구조체에 담겨있다.  자세한 내용은 [MSDN](http://msdn.microsoft.com/en-us/library/aa363082(VS.85).aspx)
+
+
+### SetUnhandledExceptionFilter
+
+SEH 구조상에서 예외 필터는 __try 영역에서만 작동한다. 하지만 일반적인 예외상황에서 항상 같은 처리 동작을 수행한다면 이 구조는 비효율적일 수 있다. 이때 사용하는 것이 SetUnhandledExceptionFilter함수이다. 이 함수는 따로 예외 경계영역을 설정하지 않은 (즉 __try하지 않은) 영역에서 예외가 발생하면, 해당 ExceptionFilter를 사용하여 except 처리를 할 수 있도록 지정하는 함수이다. 물론 여기에서도 일반 Exception Filter와 같이 Exception Filter를 반환하는 함수를 넣고 일반적인 예외를 처리하는 공통적인 작업을 수행하도록 할 수 있다. 
+
+
+# Dump
+
+ 예외를 처리하는 방법은 많이 있다. 그중에서 정말로 많이 사용되는 유용한 방법이 바로 Dump를 남기는 것이다. Dump 파일은 crash나 exception이 발생한 시점의 상황을 기록하는 것이다.  나는 일종의 에러 로그라고 생각한다. 덤프에는 여러가지 정보를 담을 수 있는데, 발생한 시간이나 충돌이 발생한 함수 또는 코드 라인, 심지어 충돌이 난 순간의 메모리 상태 또는 운영체제의 정보, CPU 레지스터의 상태등을 저장할 수도 있다.  
+
+잘 저장된 덤프파일은 디버깅에 정말 유용하다.  문제가 난 부분의 line을 확실히 알 수 있다는 장점을 넘어서 버그가 발생한 모든 맥락 (메모리, 레지스터, 운영체제 등)을 알 수 있기 때문에, 장애 요인을 추측하는데 정말 훌륭한 자료가 된다. 
+
+### Minidump
+
+Minidump는 Windows에서 지원하는 훌륭한 Dump 라이브러리이다.  이름이 Mini라고 무시하지말자. 지원하는 기능은 빵빵하다. 
+
+* Minidump는 정확한 충돌 위치에 더하여 함수의 CallStack정보까지 담을 수 있다. 
+
+* 충돌 위치의 변수값들을 확인 할 수 있다.  충돌시의 메모리정보를 따서, 그 상황의 변수들의 값이 무엇인지 하나씩 확인해 볼 수 있다. 
+
+*  Visual Studio를 사용하여 디버그 모드에서 버그가 발생한 상황을 복원하여 디버깅 작업을 할 수도 있다.
+
+* Dump를 따기 위해 하나하나 try catch를 하지 않아도된다. 처음 한번만 등록을 해주면 충돌상황에 알아서 Dump파일을 남긴다.
+
+
+### Minidump 적용하기
+
+####1. SetUnhandledExceptionFilter 로 예외 필터 함수 지정하기.  
+```c++
+SetUnhandledExceptionFilter(ExceptionFilter);
+```
+
+####2.  ExceptionFilter 함수에서 Minidump 생성
+
+ 미지정 예외가 발생하면 이제 지정한 ExceptionFilter 함수가 호출된다.  이 함수에서MiniDumpWirteDump를 불러주면 현재 상황을 dmp파일에 기록해준다. 
+
+* MinidumpWriteDump 시그니처
+>```c++
+BOOL WINAPI MiniDumpWriteDump(
+  _In_ HANDLE   hProcess,  //프로세스 핸들
+  _In_ DWORD    ProcessId, //프로세스ID 또는 쓰레드 ID
+  _In_ HANDLE   hFile, //저장할 파일
+  _In_ MINIDUMP_TYPE  DumpType, //남길 Dump 타입 (아래에 자세히)
+  _In_ PMINIDUMP_EXCEPTION_INFORMATION   ExceptionParam, 
+  //exception 정보. ExceptionFilter의 인자로 넘어온다.
+  _In_ PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, 
+  //유저가 직접 넣고 싶은 정보
+  _In_ PMINIDUMP_CALLBACK_INFORMATION    CallbackParam 
+  // minidump정보를 확장할 콜백함수
+);
+>``` 
+
+* 덤프 타입 : 어떤 종류의 데이터를 기입하느냐에 따라 덤프의 타입이 분류된다.
+>* **MiniDumpWithFullMemoryInfo** : 메모리 공간의 정보를 포함한다
+>* **MiniDumpWithThreadInfo** : 쓰레드 상태 정보를 포함한다
+>* **MiniDumpWithDataSegs** : 모든 변수 데이터 심볼을 포함한다.
+>* **MiniDumpWithHandleData**  :  OS의 핸들 정보를 포함한다.
+>* ...[MSDN](https://msdn.microsoft.com/library/windows/desktop/ms680519(v=vs.85).aspx)
+
+* 예제코드
+>```c++
+LONG WINAPI ExceptionFilter(EXCEPTION_POINTERS* exceptionInfo)
+{
+	if ( IsDebuggerPresent() )
+		return EXCEPTION_CONTINUE_SEARCH;
+		>
+	/// dump file 남기자.
+	HANDLE hFile = CreateFileA(
+		"EasyServer_minidump.dmp", GENERIC_READ | GENERIC_WRITE, 0, 
+		NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL ); 
+		>
+	if ( ( hFile != NULL ) && ( hFile != INVALID_HANDLE_VALUE ) ) 
+	{
+		//minidump 정보담는 구조체 
+		MINIDUMP_EXCEPTION_INFORMATION mdei ; 
+		mdei.ThreadId           = GetCurrentThreadId() ; 
+		mdei.ExceptionPointers  = exceptionInfo ; 
+		mdei.ClientPointers     = FALSE ; 
+		>
+		//minidump type 지정
+		MINIDUMP_TYPE mdt = (MINIDUMP_TYPE)(
+			MiniDumpWithPrivateReadWriteMemory | 
+			MiniDumpWithDataSegs | 
+			MiniDumpWithFullMemoryInfo | 
+			MiniDumpWithThreadInfo | 
+		) ; 
+		>
+		MiniDumpWriteDump( 
+			GetCurrentProcess(), 
+			GetCurrentProcessId(), 
+			hFile, 
+			mdt, 
+			(exceptionInfo != 0) ? &mdei : 0, 
+			0, NULL 
+			) ; 
+		>
+		CloseHandle( hFile ) ; 
+	}
+	else 
+	{
+		printf("CreateFile failed. Error: %u \n", GetLastError()) ; 
+	}
+	>
+	return EXCEPTION_EXECUTE_HANDLER  ;
+}
+>```
+
+---
+### CallStack 정보를 포함하자
+
+MinidumpWriteDump 함수를 통해 dump파일을 작성할때 CallStack의 정보를 추가하고 싶다면, StackWalk64 라는 API를 통해 스택의 정보를 받아 올 수 있다. 그리고 받아온 정보를 UserStreamParam 에 인자로 넘겨주면 dmp파일에 추가정보가 기입될 것이다. 
+
+ * StackWalk64 시그니처
+ 
+ > ```c++
+BOOL WINAPI StackWalk64(
+  _In_    DWORD MachineType, //CPU 타입
+  _In_    HANDLE hProcess, //프로세스 핸들
+  _In_    HANDLE hThread,  //쓰레드 핸들
+  _Inout_  LPSTACKFRAME64  StackFrame,  //스택 정보 구조체
+  _Inout_  PVOID  ContextRecord,  //쓰레드 정보 구조체
+  _In_opt_ PREAD_PROCESS_MEMORY_ROUTINE64   ReadMemoryRoutine, 
+  // 메모리 읽어오는 함수를 지정. default는 NULL
+  _In_opt_ PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine,
+  // Runtime Function 테이블 받아올 함수. 
+  // 일반적으로 사용되는 것은 SymFunctionTableAccess64
+  _In_opt_ PGET_MODULE_BASE_ROUTINE64       GetModuleBaseRoutine,
+  // 해당 모듈의 Base를 찾는 함수 일반적으로 SymGetModuleBase64
+  _In_opt_ PTRANSLATE_ADDRESS_ROUTINE64     TranslateAddress
+  // 16bit 기반 주소로 변경하는 함수 지정. default NULL
+);
+ > ``` 
+ > 여러 매개변수가 사용되지만 중요한 것은 StackFrame이다. StackFrame은 스택의 정보를 저장하는 구조체이며, 이 함수 호출을 통해서 받아오는 정보가 저장되는 곳이다. StackFrame에는 스택의 PC값, return 주소, sp와 fp등의 정보가 담긴다. 유저는 이 함수 호출뒤에 StackFrame을 통해 스택정보를 받아 사용할 수 있다.
+ >   
+ >   또 이 함수는 CallStack에서 Pop하듯이 동작한다. 그러니까 한번 호출에 하나의 StackFrame만 받아올 수 있다. 그러므로 더이상 받을 수 있는 Frame이 없을 때 까지 반복해서 수행해줘야 된다. 
+    
+--- 
+* 예제 코드
+
+ > ```c++
+// context 초기화
+RtlCaptureContext(&Context);
+>
+// stackFrame 초기화
+STACKFRAME64 stackFrame;
+memset(&stk, 0, sizeof(stk));
+>
+stackFrame.AddrPC.Offset       = Context.Rip;
+stackFrame.AddrPC.Mode         = AddrModeFlat;
+stackFrame.AddrStack.Offset    = Context.Rsp;
+stackFrame.AddrStack.Mode      = AddrModeFlat;
+stackFrame.AddrFrame.Offset    = Context.Rbp;
+stackFrame.AddrFrame.Mode      = AddrModeFlat;
+>
+for(ULONG Frame = 0; ; Frame++)
+{
+	    BOOL result = StackWalk64(
+			IMAGE_FILE_MACHINE_AMD64,  
+			GetCurrentProcess(),      
+			GetCurrentThread(),        
+			&stackFrame,                     
+		    &Context,            
+		    NULL,              
+		    SymFunctionTableAccess64,                
+		    SymGetModuleBase64,             
+		    NULL
+	    );
+	    >
+	    if( !result ) break;
+	    >
+	    // stack PC 주소로 심볼 받아오기
+	    result = SymFromAddr( 
+		    process, 
+		    (DWORD64)stackFrame.AddrPC.Offset, 
+		    &displacement, 
+		    symbol 
+	    );
+	    > 
+	    if( !result ) break;
+	    >
+	    // 결과를 UserStream에 저장한다.
+ }
+ >
+ ...
+ >
+ // 미니덤프에 UserStream 전달하여 호출
+ >```
+
+---
