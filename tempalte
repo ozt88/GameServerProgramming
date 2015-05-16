@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Title2</title>
+<link rel="stylesheet" href="https://stackedit.io/res-min/themes/base.css" />
+<script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_HTML"></script>
+</head>
+<body><div class="container"><h1 id="logging">Logging</h1>
+
+<p>우리들은 자주 로그를 찍는다, 또는 찍어라 하고 말한다. 로그를 찍는것은 시스템의 상황을 외부 저장소에 기록하는 것을 의미한다. 약속된 특정 조건에서 약속된 내용을 저장하여 문제나 운영 상황을 파악하기 쉽게 만들어 주는 역할을 한다.  앞서 말한 dump도 로그의 일종이라고 생각한다. </p>
+
+<h3 id="log-library">Log Library</h3>
+
+<p>로그를 찍어야한다. 처음 생각하기 쉬운 방법은 fprintf등으로 파일에 출력하기이다.  직접 정보를 쉽게 다룰 수 있다는 점은 좋다. 하지만 로그 파일을 안정적으로 다루는 것은 또 다른 문제이다. 추가로 동기적 I/O 형태의 호출이므로 성능이슈도 뒷따른다. 혹여 멀티쓰레드 프로그래밍을 해야된다면, fprintf를 쓸 마음이 점점 사라지게 될 것이다. </p>
+
+<p>대안은 역시 잘만든 라이브러리를 가져다 쓰는 것이다. Logging은 컴퓨터 프로그래밍에서 보편적으로 사용되는 방법이므로, 충분히 좋은 라이브러리들이 많이 있다. 몇가지 라이브러리를 소개하는 것으로 Logging 파트 이야기를 시작하겠다.</p>
+
+
+
+<h3 id="log4cxx">Log4cxx</h3>
+
+<blockquote>
+  <p>java에서 많이 사용되는 logging 라이브러리 log4j를 c++로 포팅해 온 라이브러리.  Apache 프로젝트 중 하나이다. </p>
+  
+  <h4 id="장점">장점</h4>
+  
+  <ul>
+  <li>연동 가능한(Java에서도) GUI툴 Chainsaw가 있다.</li>
+  <li>다양한 형태의 출력이 간편하다. file, console, XML, 이벤트로거, 메일 전송…</li>
+  <li>출력 패턴 설정이 간결하다. </li>
+  <li>멀티쓰레드 지원</li>
+  <li>출력 루틴들이 std::string을 기반으로 한다.</li>
+  <li>예외 기반 오류 처리를 한다.</li>
+  </ul>
+  
+  <h4 id="단점">단점</h4>
+  
+  <ul>
+  <li>Stream 지원이 아직 불완전하다.</li>
+  <li>빌드하려면 필요한 것들이 많다. (java sdk, ant…)</li>
+  <li>소스트리가 너무 크다.</li>
+  <li>업데이트가 안된다.</li>
+  </ul>
+  
+  <h4 id="사용방법">사용방법</h4>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs scss"><span class="hljs-comment">//logger(로깅 객체) 인스턴스를 받아온다.</span>
+log4cxx<span class="hljs-value">::LoggerPtr logger(log4cxx::Logger::getLogger(<span class="hljs-string">"main"</span>));</span>
+<span class="hljs-comment">//logging 설정을 받아온다. (xml에 설정파일 따로 만들어서 사용)</span>
+log4cxx<span class="hljs-value">::xml::DOMConfigurator::configure(<span class="hljs-string">"log4cxx.xml"</span>);</span>
+
+<span class="hljs-comment">//log (보안/중요)레벨에 따라 필요한 로거에게 전달 할 수 있도록 </span>
+<span class="hljs-comment">//별도의 로깅 매크로 함수가 마련되어 있다. </span>
+<span class="hljs-function">LOG4CXX_DEBUG(logger, <span class="hljs-string">"Debug message"</span>)</span>;
+<span class="hljs-function">LOG4CXX_INFO(logger, <span class="hljs-string">"Info message"</span>)</span>;
+<span class="hljs-function">LOG4CXX_WARN(logger, <span class="hljs-string">"Warn message"</span>)</span>;
+<span class="hljs-function">LOG4CXX_ERROR(logger, <span class="hljs-string">"Error message"</span>)</span>;
+<span class="hljs-function">LOG4CXX_FATAL(logger, <span class="hljs-string">"Fatal error"</span>)</span>;</code></pre>
+</blockquote>
+
+<h3 id="glog">glog</h3>
+
+<blockquote>
+  <p>구글에서 만든 로깅 라이브러리. </p>
+  
+  <h4 id="장점-1">장점</h4>
+  
+  <ul>
+  <li>stream을 지원한다.</li>
+  <li>간단한 조건부 출력이 가능하다.</li>
+  <li>디버그 모드를 지원하는 별도의 매크로가 존재한다.</li>
+  </ul>
+  
+  <h4 id="단점-1">단점</h4>
+  
+  <ul>
+  <li>로그 대상 위치가 이미 존재해야한다. (자동생성 따위 없음)</li>
+  <li>멀티쓰레드에서 쓰기 문제가 있다는 리포트</li>
+  </ul>
+  
+  <h4 id="사용방법-1">사용방법</h4>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs lasso"> <span class="hljs-comment">// 구글 로그 초기화</span>
+google<span class="hljs-tag">::InitGoogleLogging</span>(<span class="hljs-string">"Test"</span>);  
+<span class="hljs-comment">// 로거 레벨 , 출력 위치등 설정</span>
+google<span class="hljs-tag">::SetLogDestination</span>( google<span class="hljs-tag">::GLOG_INFO</span>, <span class="hljs-string">"./Test."</span> ); 
+<span class="hljs-comment">// 로그 출력</span>
+<span class="hljs-keyword">LOG</span>( INFO ) <span class="hljs-subst">&lt;&lt;</span> <span class="hljs-string">"this is info logging"</span>;
+<span class="hljs-keyword">LOG</span>( WARNING ) <span class="hljs-subst">&lt;&lt;</span> <span class="hljs-string">"this is warning logging"</span>;
+<span class="hljs-comment">// Debug Mode 로깅</span>
+DLOG(INFO) <span class="hljs-subst">&lt;&lt;</span> <span class="hljs-string">"this is debuging info logging"</span>;
+<span class="hljs-comment">//조건부 로깅</span>
+LOG_IF(INFO, numOfInfo <span class="hljs-subst">&gt;</span> <span class="hljs-number">0</span> ) <span class="hljs-subst">&lt;&lt;</span> <span class="hljs-string">"Info Exist!"</span>;
+<span class="hljs-comment">// 구글 로그 종료</span>
+google<span class="hljs-tag">::ShutdownGoogleLogging</span>();</code></pre>
+</blockquote>
+
+<h3 id="boostlog">Boost::Log</h3>
+
+<blockquote>
+  <p>c++ 표준 예비군들을 만들고계신 Boost에도 Logging 라이브러리가 있다. </p>
+  
+  <h4 id="장점-boost-공홈피셜">장점 (Boost 공홈피셜)</h4>
+  
+  <ul>
+  <li>간결함 : 딱봐도 이해하기 쉬운 형태 </li>
+  <li>확장성 : 로그 수집및 저장에 대한 커스터마이징 제공</li>
+  <li>성능 : Boost느님들의 천재성</li>
+  </ul>
+  
+  <h4 id="전체적인-구조와-사용방법">전체적인 구조와 사용방법</h4>
+  
+  <p><img src="http://www.boost.org/doc/libs/1_56_0/libs/log/doc/html/images/log/Design.png" alt="enter image description here" title=""></p>
+  
+  <ul>
+  <li><p><strong>Loggers</strong> : 다양한 형식의 log stream을 제공하는 객체들. 이미 설정되어있는 여러 로거가 있고, 필요하다면 직접 만들어서 쓸 수도 있다. 로깅에 필수적인 Log record를 생성하는 역할을 한다. logging source라고 부르기도 한다.</p>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs lasso"><span class="hljs-comment">// Logger 생성하기 ( Default Global Logger )</span>
+BOOST_LOG_INLINE_GLOBAL_LOGGER_DEFAULT(my_logger, src<span class="hljs-tag">::logger_mt</span>)
+<span class="hljs-comment">// Logger 받아오기</span>
+src<span class="hljs-tag">::logger_mt</span><span class="hljs-subst">&amp;</span> lg <span class="hljs-subst">=</span> my_logger<span class="hljs-tag">::get</span>();
+<span class="hljs-comment">// Logger로 log record작성하기</span>
+logging<span class="hljs-tag">::record</span> rec <span class="hljs-subst">=</span> lg<span class="hljs-built_in">.</span>open_record();
+<span class="hljs-keyword">if</span> (rec)
+{
+   logging<span class="hljs-tag">::record_ostream</span> strm(rec);
+   strm <span class="hljs-subst">&lt;&lt;</span> <span class="hljs-string">"Hello, World!"</span>;
+   strm<span class="hljs-built_in">.</span>flush();
+   lg<span class="hljs-built_in">.</span>push_record(boost<span class="hljs-tag">::move</span>(rec));
+}</code></pre></li>
+  <li><p><strong>Attribute</strong> : logging record는 여러개의 이름있는 attribute value로 나누어 진다. logging core는 record를 받을때 attribute라는 함수를 사용한다. attribute는 각 attribute value를 반환하는 함수이다. attribute는 어디에서 정보를 받아오느냐에 따라서 global, thread, source -specific attribute로 분류된다.  global이나 thread-specific attribute들은 따로 로거를 거치지 않고 직접 쓰레드나 프로세스로 부터 정보를 얻는 함수들이다. ( ex: 현재 시간 ) attribute value의 이름이 겹치는 경우가 있을 수 있는데, 그 경우 더 구체적인 (global &lt; source) attribute를 택한다.</p>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs r">void add_common_attributes()
+{
+    logging::core::get()-&gt;add_global_attribute(
+        <span class="hljs-string">"LineID"</span>, attrs::counter&lt; unsigned int &gt;(<span class="hljs-number">1</span>));
+    logging::core::get()-&gt;add_global_attribute(
+        <span class="hljs-string">"TimeStamp"</span>, attrs::local_clock());
+    <span class="hljs-keyword">...</span>
+}</code></pre></li>
+  <li><p><strong>Logging Core</strong> : 로깅코어로 온 attribute value들은 sink로 전달되기 전에 filter을 한번 거친다. 전체적으로 진행하는 global filter와 sink별로 따로 있는 sink specific filter들을 거쳐 sink로 전달된다.  전체 attribute value를 모아서 필요한 sink에게 attribute value를 전송하는 역할을 한다.</p>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs lasso">logging<span class="hljs-tag">::core</span><span class="hljs-tag">::get</span>()<span class="hljs-subst">-&gt;</span>set_filter(
+    logging<span class="hljs-tag">::trivial</span><span class="hljs-tag">::severity</span> <span class="hljs-subst">&gt;=</span> logging<span class="hljs-tag">::trivial</span><span class="hljs-tag">::info</span>);</code></pre></li>
+  <li><p><strong>Sinks</strong> : 일단 attribute value가 sink 까지 왔으면 이 attribute value는 반드시 출력된다. sink는 고유한 format에 따라 들어온 attribute value들을 형식화하여 formatted message를 만들어 준다.</p>
+  
+  <p>sink는 front-end와 back-end 두개의 sink set으로 구성된다. front-end sink는 앞서 말한 포메팅이나, 필터링, 그리고 쓰레드 동기화작업을 진행한다. 필터와 포멧만 집어넣어주면 진행하는 작업은 모두 같기 때문에 라이브러리에서 만들어준 front-end sink를 사용하면 된다. back-end sink는 처리된 메시지를 원하는 OUTPUT에 전달하는 역할을 한다. OUTPUT의 종류가 매우 다양하기 때문에, back-end sink의 구현은 각양각색이다. 그래도 대부분의 경우 라이브러리가 제공하고 있다. </p>
+  
+  <pre class="prettyprint"><code class="language-c++ hljs lasso"><span class="hljs-comment">// sink 초기화</span>
+typedef sinks<span class="hljs-tag">::synchronous_sink</span><span class="hljs-subst">&lt;</span> sinks<span class="hljs-tag">::text_ostream_backend</span> <span class="hljs-subst">&gt;</span> 
+    text_sink;
+boost<span class="hljs-tag">::shared_ptr</span><span class="hljs-subst">&lt;</span> text_sink <span class="hljs-subst">&gt;</span> sink <span class="hljs-subst">=</span> 
+    boost<span class="hljs-tag">::make_shared</span><span class="hljs-subst">&lt;</span> text_sink <span class="hljs-subst">&gt;</span>();
+<span class="hljs-comment">// back-end sink로 출력할 장소지정</span>
+sink<span class="hljs-subst">-&gt;</span>locked_backend()<span class="hljs-subst">-&gt;</span>add_stream(
+boost<span class="hljs-tag">::make_shared</span><span class="hljs-subst">&lt;</span> std<span class="hljs-tag">::ofstream</span> <span class="hljs-subst">&gt;</span>(<span class="hljs-string">"sample.log"</span>));
+<span class="hljs-comment">// format 설정</span>
+sink<span class="hljs-subst">-&gt;</span>set_formatter(
+        expr<span class="hljs-tag">::format</span>(<span class="hljs-string">"%1%: &lt;%2%&gt; %3%"</span>)
+        <span class="hljs-subst">%</span> expr<span class="hljs-tag">::attr</span><span class="hljs-subst">&lt;</span> unsigned int <span class="hljs-subst">&gt;</span>(<span class="hljs-string">"LineID"</span>)
+        <span class="hljs-subst">%</span> logging<span class="hljs-tag">::trivial</span><span class="hljs-tag">::severity</span>
+        <span class="hljs-subst">%</span> expr<span class="hljs-tag">::smessage</span>
+    );
+<span class="hljs-comment">//core 에 sink 등록</span>
+logging<span class="hljs-tag">::core</span><span class="hljs-tag">::get</span>()<span class="hljs-subst">-&gt;</span>add_sink(sink);</code></pre></li>
+  </ul>
+</blockquote>
+
+<h3 id="multithread-logging">Multithread Logging</h3>
+
+<p>멀티 쓰레드 환경에서 로그를 작성할때, 쓰레드 이슈는 정말 중요하다. 발생한 순서대로, 깨지지 않은 문자열의 로그를 찍기위해서는 임계영역 보호가 반드시 필요할 것이다. 그리고 이런 보호에서도 뛰어난 성능을 발휘할 수 있어야 한다. 앞서 언급한 라이브러리들은 대부분 Thread Safe하기 때문에 큰 걱정없이 사용해도 괜찮지만, 우리가 직접 로깅 모듈을 만들어야 한다면 이야기는 좀 달라진다.  순서를 보장할 수 있는, 그리고 단일 문자열을 보호할 수 있는 로깅 방식을 생각해보자.</p>
+
+<h4 id="front-end-back-end-sink">front-end / back-end sink</h4>
+
+<blockquote>
+  <p>Boost 라이브러리는 front-end에서 동기화 하여 back-end에 넘겨주고 back-end에서 실제 log를 처리한다. 이와 비슷한 구조에서 Multi-Thread 이슈를 해결해보자.</p>
+  
+  <h4 id="front-end">front-end</h4>
+  
+  <p>front-end는 로그들을 동기화하여 받아들일 수 있어야한다. 들어온 순서를 지키고, 문자열을 잘 보존한 상태로 로그를 받아들여야 할 것이다.</p>
+  
+  <p>일단 순서보장의 문제는 FIFO를 보장하는 Queue 자료구조를 사용하면 해결될 거라 생각한다. Log Queue에 대한 접근이 어떻게 제공되는 지에 따라서 반드시 순서가 일치하지 않을 수도 있다. 그렇다면 Log의 TimeStamp값에 따른 PriorityQueue를 쓰는 방법도 있겠다. </p>
+  
+  <p>중요한 것은 Queue가 Thread Safe해야한다는 것이고, 여러 쓰레드에게 공평하게 Queue접근 권한을 나눠줘야한다는 것이다. 그러면 기아상태에 대한 보완책이 있는 Lock-Free한 Queue를 쓰면 우리의 고민이 많이 해결될 것이다. </p>
+  
+  <h4 id="back-end">back-end</h4>
+  
+  <p>back-end에서는 front-end가 관리하는 log record queue에서 pop하여 정해진 파일에 기록만 해주면 된다. 하지만 기록하는 작업도 I/O이므로 별도의 워커 쓰레드를 주는 것이 효과적일 것이다. queue에 데이터가 있을 때 까지 peeking하다가, queue에 데이터가 들어오면 깨어나서 들어온 record를 출력하는 작업을 진행하게 한다. </p>
+</blockquote></div></body>
+</html>
