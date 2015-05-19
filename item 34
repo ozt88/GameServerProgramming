@@ -1,0 +1,214 @@
+# std::bind보단 람다를 쓰자.
+
+std::bind는 C++98에서 std::bind1st와 std::bind2nd 그리고 stl에서 2005년부터, 그 이전에는 TR1에서부터 쭉 많은 사람들에게 사용되었다. 그래서 누군가는 std::bind를 버리라는 말이 띠껍게 들릴지도 모른다. 하지만 C++11에서 채용된 람다는 강력한 기능들과 이해하기 쉬운 문법으로 무장하여 std::bind보다 더 좋은 선택이 되었다. 그리고 C++14에 와서는 람다는 std::bind의 완벽한 상위호환이 되었다. 
+
+### std::bind는 가독성이 떨어진다.
+
+std::bind보다 람다를 선호하는 가장 큰 이유중 하나는 바로 가독성이다. 시간에 맞춰 알람을 주는 함수를 만드는 예를 살펴보자.
+
+```c++
+using Time = std::chrono::steady_clock::time_point;
+enum class Sount { Beep, Siren, Whistle };
+using Duration = std::chrono::steady_clock::duration;
+
+//at time t, make sounds s for duration d
+void SetAlarm(Time t, Sound s, Duration d);
+```
+
+위 함수가 주어졌다고 가정하고, 우리는 한시간 뒤에 알람이 울리기 시작하여 30초 동안 유지되길 바란다. 대신 어떤 소리로 알람이 울릴지는 결정하지 않았다. 그러면 우리는 `setAlarm`의 인터페이스를 사용하여 sound만 인자로 받는 람다를 만들어 낼 수 있다.
+
+```c++
+auto setSoundL = []( Sound s )
+{
+	using namespace std::chrono;
+	//지금으로부터 1시간후에, 30초동안, 받을인자 s소리의 알람 발사
+	setAlarm( steady_clock::now() + hours(1), 
+			  s,
+			  seconds(30) );
+};
+```
+
+c++ 14에서는 literals라는 기능을 지원한다. 정해진 접미사를 붙이면 타입으로 생성된다. 여기서 사용되는 hours는 h, second는 s로 쓸 수 있다. 그것을 적용하면 다음과 같다.
+
+```c++
+auto setSoundL = []( Sound s )
+{
+	using namespace std::chrono;
+	using namespace std::literals; //for literals
+	//literals로 전환
+	setAlarm( steady_clock::now() + 1h, 
+			  s,
+			  30s );
+};
+```
+
+이 람다를 bind로 변형한 버전을 보자. 이것은 간단한 함수이지만, 람다로 변경하는 과정에서 오류가 하나 발생한다. 자세한 내용은 뒤에서 이야기 하자.
+
+```c++
+using namespace std::chrono;
+using namespace std::literals;
+using namespace std::placeholders;
+
+//std::bind로 적용 s를 placeholder를 사용하여 받고있다.
+auto setSoundB =
+    std::bind(setAlarm,
+              steady_clock::now() + 1h, //여기가 잘못되었다.
+              _1,
+              30s);
+```
+
+std::bind는 첫번째 인자로 오는 함수에 그 뒤에오는 인자들을 전달하여 호출할 수 있는 객체이다. 첫번째 인자를 제외하고 나머지 인자들은 첫번째 인자로오는 함수에 전달되는 인자가 된다. 그래서 setSoundB로 불리는 setAlarm은 `steady_clock::now() + 1h, placeHolder_1, 30s`를 인자로 받게 된다. 여기서 사용되는 placeholder는 setSoundB가 호출될 때 인자로 들어온 녀석을 placeHolder가 위치한 자리로 전달해주는데 사용된다. 즉 setAlarm의 2번째 인자 sound가 setSoundB가 호출될 당시에 들어온 인자에 의해 결정된다. 때문에 이 setSound를 사용하는 유저는 setAlarm의 시그니처를 찾아서 어떤 인자를 넣어야할지 확인해야할 것이다.
+
+일단 이 코드는 잘못된 코드이다. 람다에서 `steady_clock::now( ) + 1h` setAlarm의 인자로 사용되는 것은 매우 자연스럽다. 람다가 호출되는 순간에 즉, setAlarm이 실제로 호출되는 그 순간에  `steady_clock::now()`가 같이 불려서 정확한 현재시간을 알수있게 해준다.  이것이 우리가 진정 바라는 동작방식일 것이다. 하지만 위의 예제처럼 std::bind를 사용하면, `steady_clock::now()`는 std::bind에 인자로 넘기는 시점에 호출되어서 실제 setAlarm이 동작하는 시간과 별개의 값을 내뱉는다. 이러면 우리가 생각하는 시간과 달리 동작하게 될 것이다. 
+
+이 문제를 해결하기 위해서는 setAlarm이 호출되는 시점에 동작하는 표현식이 필요하다. std::bind내부에 다시 std::bind를 사용하여 이것을 가능하게 할 수는 있다. 
+
+```c++
+auto setSoundB =
+   std::bind(setAlarm,
+             std::bind(std::plus<>(), steady_clock::now(), 1h),
+             _1,
+             30s);
+```
+
+std::plus는 C++98에서 사용되던 템플릿이다. 원래는 어떤 타입의 덧셈인지를 알아야 하기 때문에 `std::plus<T>`라고 썼는데 C++14부터는 알아서 추론해서 `std::plus<>`라고 써도 된다고 한다. C++11을 쓴다면 이렇게 써야한다.
+
+```c++
+auto setSoundB =
+   std::bind(setAlarm,
+             std::bind(std::plus<steady_clock::time_point>(),
+			           steady_clock::now(), 1h),
+             _1,
+             30s);
+```
+
+### std::bind는 이름 곂침문제가 발생한다.
+
+여기까지 봤으면 std::bind를 쓰는게 얼마나 우리의 코드를 더럽히는 지 알 수 있을 것이다. 추가적인 문제를 제기해보겠다. setAlarm이 4개짜리 인자를 받는 함수로 오버로딩 된 상황을 생각해보자. 
+
+```c++
+enum class Volume { Normal, Loud, LoudPlusPlus };
+void setAlarm(Time t, Sound s, Duration d, Volume v);
+```
+
+람다는 예전에 쓰던것 그대로 사용이 가능하다. overload resolution이 세개짜리 인자인 버전의 setAlarm을 선택해 줄 것이기 때문이다. 하지만 std::bind는 문제가 다르다.
+
+```c++
+auto setSoundB = 
+	std::bind(setAlarm, 
+			  std::bind(std::plus<>(),
+						steady_cloc::now(), 1h),
+			  _1,
+			  30s);
+```
+
+여기서 컴파일러가 setAlarm에 대해서 알 수 있는 정보는 이름뿐이다. 실제로 어떻게 인자가 들어가서 불리는지는 나중에 결정되기 때문이다. 그래서 두 setAlarm중 어떤것을 넘겨야할지 알 수 없기 때문에 에러를 낸다. 이걸 컴파일할 수 있게 하려면 넘기는 함수 setAlarm을 정확한 시그니처를 갖춘 함수포인터로 형변환하여 넘겨줘야한다.
+
+```c++
+using SetAlarm3ParamType = 
+	void(*)(Time t, Sound s, Duration d);
+
+auto setSoundB = 
+	std::bind(static_cast<SetAlarm3ParamType>(setAlarm),
+			  std::bind(std::plus<>(), 
+						steady_clock::now(),
+						1h),
+			  _1,
+			  30s);
+```
+
+### std::bind는 성능이 좋지 않다.
+
+여기서 우리는 std::bind와 lamdbas의 또 다른 차이점을 발굴해 낼 수 있다. (화수분 같은 std::bind) `setSoundL`(람다)는 setAlarm을 일반적인 함수로 호출한다. 따라서 컴파일러에 의해 inline 될 가능성이 있다. 
+
+반면 `setSoundB`(std::bind)는 setAlarm을 함수포인터로 들고 있는다.  setSoundB를 호출하였을 때, setAlarm의 호출이 함수포인터를 통해 진행되기 때문에 컴파일러가 이 함수포인터를 통한 호출을 inline으로 만들 확률이 낮다. setSoundB는 setSoundL보다 inline화 될 확률이 낮다. 그래서 Lambdas는 std::bind보다 코드수행속도가 더 빠를 확률이 높다. 
+
+setAlarm의 예시는 함수하나만 가지고 다루었다. 더 많고 복잡한 함수들을 가지고 람다를 쓰는 경우를 생각해보자. 지역변수 lowVal, highVal을 사용하여 그 중간값을 찾아내는 람다(C++14)이다.
+
+```c++
+//auto를 인자로 사용! (C++11에선 안된다)
+auto betweenL = [lowVal, highVal](const auto& val)
+	{ return lowVal <= val && val <= highVal; };
+```
+
+std::bind에서도 똑같은 것을 표현할 수 있다. 하지만 그 작업은 좀더 복잡하다.
+
+```c++
+auto betweenB = 
+    std::bind(std::logical_and<>(),
+              std::bind(std::less_equal<>(),lowVal, _1),
+              std::bind(std::less_equal<>(), _1, highVal);
+```
+
+아무리 살펴봐도 람다가 단순히 짧은 것을 넘어서 더 가독성이 좋고, 코드 유지 보수에 좋다.
+
+### std::bind는 불투명하다.
+
+앞서 std::bind의 placeholder 이야기를 했었더랬다. placeHolder의 작업은 그 코드만 가지고는 완벽하게 이해할 수 없기에 불투명하다. 하지만 그게 전부가 아니다. Widget의 compressed copy를 만드는 코드를 보자.
+
+```c++
+enum class CompLevel { Low, Normal, High };
+Widget compress(const Widget& w, CompLevel lev);
+```
+
+주어진 위 함수에서 압축할 widget이 정해져있고, 얼마만큼 압축할지를 모르겠다면 다음과 같은 bind로 함수객체를 만들 수 있을 것이다.
+
+```c++
+Widget w;
+using namespace std::placeholders;
+auto compressRateB = std::bind(compress, w, _1);
+```
+
+Widget w가 bind로 넘어갈 때 compressRateB는 compress가 호출될때까지 w를 저장해 둔다. 그런데 이 객체는 어떻게 저장될 것인가? 참조로 저장되는 것과 값으로 저장되는 경우가 서로 다른 결과를 만들 것이다. 참조로 저장하는 경우 중간에 객체 w를 변경하게 된다면, w의 처음 상태와 compress가 호출되는 시점에서의 상태가 서로 다르게 될 것이기 때문이다.  
+
+일단 질문의 답은 값으로 저장하는 것이다. 하지만 이런 내용을 알기위해서는 std::bind의 동작구조를 알고 있어야한다. std::bind의 인터페이스 만으로는 참조를 전달하는지, 값을 전달하는지 알 수 없다. 하지만 람다는 다르다!
+
+```c++
+//by value
+auto compressRateL = [w](CompLevel lev)
+	{ return compress(w, lev); };
+//by ref
+auto compressRateL = [&w](CompLevel lev)
+	{ return compress(w, lev); };
+```
+
+이런 인터페이스를 통해서 람다의 유저는 인자가 어떤 형태로 전달되는지 명확히 이해할 수 있다.
+
+### 그럼에도 std::bind를 쓸 수밖에 없는 경우 (C++ 11)
+
+람다에 비해 std::bind는 가독성이 떨어지고, 성능도 좋지 않고, 표현력도 구리다. C++ 14에서는 std::bind를 쓸 이유가 없다. 하지만 C++11에는 아직 지원되지 않는 기능들 때문에 std::bind를 쓸 수 밖에없는 경우가 있다.
+
+>#### move capture 
+>
+>C++ 11 람다는 move capture를 지원하지 않는다. 대신 람다와 std::bind를 섞어서 사용하는 것은 가능하다. 자세한 내용은 Item 32에서 다룬다. C++14에서는 이 문제를 init capture를 통해 해결하였다.
+> 
+> #### 가변 함수 객체 (ex: 템플릿 함수)
+> 
+> std::bind는 바인딩한 인자들을 perfect-forwarding을 통해 함수에게 전달하기 때문에, 어떤 타입의 인자라도 받아줄 수 있다. 이 특징은 템플릿 함수객체 등을 bind해서 사용할때 유용하다. 다음의 예를 보자.
+> 
+> ```c++
+> class PolyWidget{
+> public:
+>      template<typename T>
+>      void operator( ) ( const T& param);
+>      ...
+> };
+> 
+> //std::bind에서 PolyWodget을 바인딩
+> PolyWidget pw;
+> auto boundPW = std::bind(pw, _1);
+>  
+> //boundPW는 모든 인자를 받아줄 수 있다.
+> boundPW( 1930 );      
+> boundPW( nullptr );
+> boundPW( "Rosebud" );
+> ```
+>  
+> C++11 람다에서는 이런 기능을 할 수 있는 방법이 없다. 하지만 C++14부터 auto를 인자로 받을 수 있게 되면서 다음과 같은 방법으로 Perfect-forwarding할 수 있다. 자세한 내용은 item 33
+>  
+> ```c++
+> auto boundPW = [pw] ( const auto& param ) 
+>         { pw(param); };
+> ```
+
+이것들은 분명히 람다의 문제라고 할 수 있지만, 일시적인 문제일 뿐이다. 점점 컴파일러들이 C++ 14를 지원하기 시작하고 있기 때문이다. bind가 처음 C++에 들어왔을때 이전에 비해서 큰 발전이 있었다. C++11에서 람다가 추가되고나서 도 std::bind를 완전히 과거의 유물로는 만들지 못했다. 하지만 C++14에서는 더이상 std::bind의 사용하기 좋은 경우를 발견하긴 어려울 것이다.
