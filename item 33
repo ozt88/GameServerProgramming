@@ -1,0 +1,76 @@
+# 람다에서 std::forward 인자는 decltype
+
+c++14람다에서 가장 신통한 것은 바로 인자로 auto를 받는 generic lamdas이다.  람다에서 인자를 auto로 받는다는 것은 람다로 부터 나온 closure 클래스의 opearator( )가 템플릿이 된다고 볼 수 있다. 예를 들어 이런 auto를 인자로 받는 람다를 보자.
+
+```C++
+auto f = [](auto x){ return func(normalize(x));};
+``` 
+이 람다로 부터 나온 클로저 클래스는 다음과 같이 생겼다.
+
+```c++
+class SomeCompilerGeneratedClassName{
+public:
+	template<typename T>
+	auto operator( )(T x) const
+	{ return func(normalize(x)); }
+	...
+}
+```
+
+위 예제에서 람다가 하는 일이라고는 x를 받아서 normalize함수로 전달하는게 전부이다. 만약 normalize가 lvalue와 rvalue를 별도로 오버로딩 되어있다면, 위 람다는 원하는 대로 동작하지 않을 것이다. rvalue는 auto로 lvalue로 추론되기 때문이다.(item2 참고) 
+
+제대로 동작하게 하려면 인자 x를 normalize함수에 perfect-fowarding해야한다. 여기에 필요한 것이 universial reference와 std::forward이다.(item 24, 25참고) 배운대로 적용해보면 다음과 같다.
+
+```c++
+auto f = []( auto&& x )
+			{ return func(normalize(std::forward<???>(x))); };
+```
+
+여기서 문제가 발생한다. 템플릿 함수와 달리 auto를 쓰는 람다에서 std::forward에 들어갈 템플릿 패러미터, 즉 x의 타입을 받아서 쓸 수 가 없다는 것이다. 람다가 실행부에서 클로저 클래스로 변하면 템플릿 형태가 되겠지만은 지금 당장 선언할때 필요한 표현식이 없다는 것이 문제이다. 
+
+다른 방법을 생각해보자. 결과적으로 std::forward가 넘어온 인자 형식의(lvalue /rvalue) 참조로 전달해주기만 하면 되는 거다. 그러면 x에 대한 decltype을 써보는 건 어떨까?  tem 28을 참고하면서 생각해보자. 인자로 lvalue가 넘어오면 auto&& 인 x는 lvalue reference 가 된다. 인자로 rvalue로 넘어오면 x는 rvalue reference가 된다. 
+
+item 28에서 다루었던 std::forward의 perfect forwarding은 template에서 적용되는 것이었다. T가 lvalue reference이거나 non-reference일때 각각 lvalue reference로 그리고 rvalue reference로 변경되는 과정을 보았다. 그렇다면 지금 다룰 decltype은 이전 내용과는 조금 다르다. rvalue가 인자로 들어온 경우 non-reference가 아니라 rvalue reference이기 때문이다. 실제로 std::forward의 실행부에 적용시켜보자.
+
+```c++
+//c++14 std::forward
+template<typename T>
+T&& forward(remove_reference_t<T>& param)
+{ return static_cast<T&&>(param); }
+```
+
+본래 T가 non-reference type인 경우를 생각해보자. Widget으로 인스턴싱 되는 경우 forward함수는 다음과 같다.
+
+```c++
+Widget&& forward(Widget& param)
+{ return static_cast<Widget&&>(param); }
+```
+
+하지만 rvalue 인 Widget의 decltype으로 전하는 경우 T는 Widget이 아니라 Widget&&로 전달될 것이다. 이 경우의 인스턴싱은 다음과 같다.
+
+```c++
+Widget&& && forward(Widget& param)
+{ return static_cast<Widget&& &&>(param); };
+```
+
+여기에 referece collapsing을 적용하면 rvalue reference에 대한 rvalue reference는 rvalue reference로 결정된다. 따라서 최종적인 인스턴싱은 다음과 같다.
+
+```c++
+Widget&& forward(Widget& param)
+{ return static_cast<Widget&&>(param); };
+```
+
+이 결과는 T가 rvalue로 초기화되어 non-reference type이 된 템플릿에서 forwarding과 일치한다.  그러면 template에서 T를 사용하여 std::forward하는 것과 auto를 사용하는 람다에서 decltype을 사용하여 std::forward하는 경우 인자의 타입이 lvalue 거나 rvalue이거나 상관없이 일치한다는 것을 알 수 있다. 그러면 람다에서 rvalue의 문제를 decltype(x)로 해소시켜서 perfect-forwarding할 수 있다.
+
+```c++
+auto f = [](auto&& param)
+{ return func(normalize(std::forward<decltype(param)>(param))); };
+```
+
+C++14에서 람다는 variadic 인자를 받을 수 있다. 위에서 응용하여 여러개의 인자에 대한 perfect-forwarding도 가능하다.
+
+```c++
+auto f = [](auto&&... params)
+{ return func(normalize(std::forward<decltype(params)>(params)...)); };
+```
+
