@@ -1,0 +1,111 @@
+
+# 멀티 쓰레드 서버 버그잡기 2
+
+### 전체 쓰레드 상황 빠른 스캔
+ * DB 쓰레드들은 GQCS에서 건전하게 대기 중
+
+ ![enter image description here](https://lh3.googleusercontent.com/-F6-dtPV0uD0/VWSImCSrFTI/AAAAAAAAC_k/1rK3eO4uSdQ/s0/Cap+2015-05-26+23-51-10-589.png "dbthread.png")
+ 
+ * IO 쓰레드들은 FlushSend에서 방황 중
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-pJo7DFilQus/VWSJHofdI7I/AAAAAAAAC_w/SQOE5GTASSY/s0/Cap+2015-05-26+23-54-11-207.png "Cap 2015-05-26 23-54-11-207.png")
+
+### FlushSend 빠른 스캔
+
+ * I/O 쓰레드 대부분이 FastSpinlock에 걸려있다. 데...데드락?
+ * 하지만 해당 임계영역에 블로킹 걸릴 소지가 없다. 단일 Lock만 사용하기에 Lock자원의 교착상태가 발생할 여지가 없다. 
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-ncXzpSfKKoc/VWSKv_e-I5I/AAAAAAAADAE/pcA3Y9oE-H4/s0/Cap+2015-05-27+00-01-01-606.png "Cap 2015-05-27 00-01-01-606.png")
+ 
+ * 실제로 덤프 시점에 하나의 쓰레드가 락을 빠져나가는 것이 포착되었다. Lock은 문제가 아니야. FlushSend를 호출하는 DoSendJob으로 화살을 돌려본다.
+
+### DoSendJob 빠른 스캔
+
+ * DoSendJob은 Blocking이 걸리기 쉬운 구조로 생겼다. 의심이 증폭된다.
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-sNMs80W30rM/VWSLxzv3PII/AAAAAAAADAU/pvo24vNn7uw/s0/Cap+2015-05-27+00-05-30-066.png "Cap 2015-05-27 00-05-30-066.png")
+
+ * 세션의 FlushSend가  실패하게되면 LSendRequestSessionList가 pop되지 못하고 다시 루프를 반복한다. 만약 FlushSend가 계속 실패한다면 무한 루프에 빠지게 될 것!
+
+### FlushSend 가 실패하는 경우
+
+ * 세션의 SendPendingCount가 0이 아닌 경우 SendFlush가 실패한다.
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-LYL1jxPMkW0/VWSNaSIzO_I/AAAAAAAADAo/nXpYSub3hzs/s0/Cap+2015-05-27+00-10-29-340.png "Cap 2015-05-27 00-10-29-340.png")
+
+ * SendPendingCount는 세션의 SendFlush가 성공하면, 즉 유효한 Send작업을 요청한 시점에서 값을 증가시킨다.
+ 
+  ![enter image description here](https://lh3.googleusercontent.com/-uiq37u5ZqyY/VWSNw7svyqI/AAAAAAAADA0/ZRNe42vGwDY/s0/Cap+2015-05-27+00-14-00-524.png "Cap 2015-05-27 00-14-00-524.png")
+
+ * SendPendingCount는 SendCompletion에서 값을 감소시킨다. 
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-C97cYz_zN_M/VWSOpKJuQiI/AAAAAAAADBI/dF6eEa7z5ro/s0/Cap+2015-05-27+00-17-38-816.png "Cap 2015-05-27 00-17-38-816.png")
+
+ * 즉 SendPendingCount는 현재 연기된 Send작업의 개수를 축적시키는 변수이다. 
+ 
+ * FlushSend에서 SendPendingCount가 0이 아니면 실패하게하는 것은 SendPendingCount를 2이상이 되지 않게 만드려는 의도로 받아들일 수 있다.
+
+ * 왜 SendPendingCount가 2이상이면 안될까? FlushSend의 의미부터 다시 생각해봐야한다.
+
+### SendFlush의 의미
+
+ * 그 기능과 이름에서 부터 풍겨오는 강력한 느낌은 축적한 sendbuffer를 한꺼번에 보내버리는 애라는 거다.
+ 
+ * 세션은 PostSend 라는 메소드를 통해 SendBuffer에 보낼 데이터를 축적한다. 그리고 쓰레드별로 Send가 예약된 세션을 담는 리스트 LSendRequestSessionList에 현재 세션을 push한다. 
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-2ZdsSa0zmWM/VWSRklWcN9I/AAAAAAAADBk/nK6eLM4_ROo/s0/Cap+2015-05-27+00-29-04-750.png "Cap 2015-05-27 00-29-04-750.png")
+
+ * 그리고 I/O 쓰레드는 GQCS와 들어온 I/O를 처리하는 DoIocpJob 과 타이머 작업을 처리하는 DoTimerJob이 끝나면 아까 본 DoSendJob을 통해서 자신의 LSendRequestSessionList에 담긴 세션들을 FlushSend한다.
+
+ ![enter image description here](https://lh3.googleusercontent.com/-o57ntiMWru4/VWSSQ8-yrTI/AAAAAAAADB0/0mmwUDpAEYs/s0/Cap+2015-05-27+00-33-14-352.png "Cap 2015-05-27 00-33-14-352.png")
+
+ * 따라서 FlushSend란 여기저기서 요청하는 Send작업이 필요할때마다 WSASend를 처리하는 것이 아니라 한 프레임에 보내야하는 데이터를 모아서 한꺼번에 처리하는 구조를 위해 만들어진 메소드라고 볼 수 있다. 축적하여 나중에 한꺼번에 보내는 구조는 Nagle알고리즘과 비슷한 역할을 하지 않을까 생각해 본다.
+
+###  SendPendingCount가 2이상이 되면 안되는 이유
+
+ * 정확하게 이야기하면 SendPendingCount가 1인 상황에서 FlushSend를 처리하면 안되는 이유이다. 
+ 
+ * SendPendingCount가 1인 상황, 즉 이미 SendBuffer 전체에 대해서 Send요청을 보냈지만, 완료는 되지 않은 상황에서 다시 FlushSend를 한다고 생각해보자. 
+ 
+ * FlushSend작업이 성공했다고 해서 아직 Send가 완벽하게 끝난것은 아니다. 확실히 전체 버퍼가 다 전송될 것이라고 보장할 수 없기 때문이다. 그래서 버퍼가 Remove되는 , 즉 버퍼에 저장된 데이터가 필요없어지는 순간은 sendCompletion이 호출되는 시점이다.
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/Yw1_tdS8EWDqm86xNKuKr3iLbIgELCsYo8tkW8urqoA=s0 "Cap 2015-05-27 00-17-38-816.png")
+ 
+ * 그래서 FlushSend가 성공해도 SendBuffer는 여전히 보낸 데이터를 가지고 있다. 그 상황에서 다시 FlushSend를 호출하면 이전에 Send요청을 한 데이터가 아직 버퍼에 남은 상황에서 다시 재전송을 하게된다. 이러면 중복전송을 할 뿐만아니라 받는 입장에서는 well-serialized data를 받을 수 없다.
+
+ * 그래서 우리의 훌륭한 교본 EduServer_IOCP에서는 FlushSend한 데이터가 완벽하게 SendComplete 될 때까지 SendFlush를 블로킹한다.
+
+
+### 문제는?
+
+ * 문제는 이 Blocking 작업이 해당 세션만 Blocking할 뿐아니라 작업하는 I/O 쓰레드를 Blocking한다는 것에 있다. (Blocking의 의미를 생각하면 당연하지만...)
+
+ * 모든 I/O 쓰레드가 이 Blocking 상태에 놓이게 된다고 가정해보자. Blocking이 해제되기 위해서는 FlushSend한 세션이 SendCompletion이 되어서 PendingCount를 줄여줘야한다.  SendCompletion되기 위해서는 GQCS를 호출하여 완료된 I/O작업을 받아서 처리해줄 쓰레드가 필요하다. 그런데 그 작업을 해줄 쓰레드는 다 SendCompletion만을 기다리고 있다. 그야말로 교착상태의 표본이다.
+
+ * 실제로 현재 발생한 덤프시점에서 모든 I/O쓰레드는 FlushSend에 있고, 모든 SendPendingCount가 1이다. 
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-boXiwdITkMo/VWSYH_AgYyI/AAAAAAAADCU/bgVeh_Y9t3U/s0/Cap+2015-05-27+00-58-02-860.png "Cap 2015-05-27 00-58-02-860.png")
+
+ * DoSendJob의 블로킹 구조때문에 I/O쓰레드들이 교착상태에 빠지는 것이 이 버그를 만든 주된 원인이다
+
+### 언제 이런 경우가 발생하는가?
+
+ * 이 상황이 만들어지는 주된 조건은 모든 I/O쓰레드가 처리하는 FlushSend작업에서 Blocking이 걸리는 것이다. 따라서 쓰레드 개수보다 많은 복수의 세션이 SendPendingCount가 1인 상황에서 다시 FlushSend를 호출하는 상황이 필요하다. 
+
+ * 세션이 FlushSend를 중복 처리하게 되려면, 짧은 시간동안 여러번 해당 세션이 Send작업을 요청해야한다. PostSend할 때마다 LSendRequestSessionList에 push되므로 DoSendJob에 들어가기전에 리스트에 같은 세션이 두개 있기만 해도 FlushSend블로킹이 발생한다.
+
+ * 일반적으로 서버가 한 세션에 요청하는 Send는 한번이다. 왜냐하면 대부분 REQUEST & RESPONSE 형태로 서버와 핑퐁하기 때문이다. 하지만 Broadcast같이 서버가 일방적으로 여러개의 세션에 전송하는 경우, 다른 요청과 곂쳐 중복 Send하는 경우가 발생할 수 있다.
+
+ * 현재 EduServer_IOCP는 다수의 유저간 채팅을 구현하기위해 Broadcast를 지원하고 있는데, 아마도 이 Broadcast가 자주 요청되어 중첩된 Send요청이 다발적으로 발생한 것으로 보인다.
+
+### 해결 방안
+
+ * 교착상태를 해결하기 위한 간단한 아이디어는 GQCS를 하는 별도의 쓰레드를 항상 확보해두는 것이다. 그러면 위 문제가 발생하지는 않을 것이다. 하지만 그만큼 SendJob를 처리하는 쓰레드가 줄어들어서 Send양이 많아지면 더 지연이 발생할 것이라는 단점이 있다.
+ 
+ * 두번째 아이디어는 SendFlush작업을 GCE처럼 처음 걸린 하나의 쓰레드가 도맡아서 처리하는 것이다. GCE의 장점들을 많이 가져올 수 있다는 점은 좋지만, Lock-Free한 전역 큐가 필요하고, 그 큐에 push/pop 작업이 매우 빈번하기에 부하가 많많치 않을 것같아서 포기했다.
+ 
+ * 마지막 아이디어는 쓰레드에 블로킹을 거는 대신 세션에 블로킹을 거는 방법이다. 세션에 블로킹을 건다는 것은 사실 불가능하기에, FlushSend를 실패한 세션에 대해서는 다음번 SendJob으로 지연시킨다는 개념이다. 실제 구현에 적용한 방법이기도 하다. 위 문제를 해결한 코드를 제시하면서 이 글을 마치려고한다.
+ 
+ ![enter image description here](https://lh3.googleusercontent.com/-85TezGz-9Oo/VWSikeZaHhI/AAAAAAAADCo/i7grrSa-gIM/s0/Cap+2015-05-27+01-39-40-038.png "Cap 2015-05-27 01-39-40-038.png")
+ 
+
